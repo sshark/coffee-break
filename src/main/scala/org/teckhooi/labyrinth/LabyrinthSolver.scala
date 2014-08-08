@@ -71,35 +71,28 @@ object LabyrinthSolver {
     }
 
     case class Marker(pos: Pos, history: Vector[Pos]) {
-      def moves(bluePrint : BluePrint) = Vector(Up(), Right(), Down(), Left()).filter(
-        m => m.isLegal(pos, bluePrint) && !history.contains(m.move(pos, bluePrint).getOrElse(Pos(0,0))))
+      def dirs(bluePrint : BluePrint) = Vector(Up(), Right(), Down(), Left()).filter(
+        m => m.isLegal(pos, bluePrint) && !history.contains(m.move(pos, bluePrint).get))
 
-      def move(bluePrint : BluePrint) : Vector[Marker] = moves(bluePrint).map(m => Marker(m.move(pos, bluePrint).get, pos +: history))
+      def move(bluePrint : BluePrint) : Vector[Marker] = dirs(bluePrint).map(m => Marker(m.move(pos, bluePrint).get, pos +: history))
 
       def hasArrivedAt(goal: Pos) = pos == goal
     }
 
     def paths(start: Pos, goal: Pos, bluePrint : BluePrint): Vector[Marker] = {
-      def _paths(marker: Marker, markers : Vector[Marker]): Vector[Marker] = {
-//      def _paths(marker: Marker, markers : Vector[Marker], xs : Vector[Marker]): Vector[Marker] = {
+      @annotation.tailrec
+      def _paths(marker: Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]): Vector[Marker] = {
         if (marker.hasArrivedAt(goal)) Marker(marker.pos, marker.pos +: marker.history) +: markers
-        else if (marker.moves(bluePrint).isEmpty) markers
+        else if (marker.dirs(bluePrint).isEmpty) {
+          if (prevMarkers.isEmpty) Vector() else _paths(prevMarkers.head, markers, prevMarkers.tail)
+        }
         else {
-          val moves = marker.move(bluePrint)
-          println(marker.moves(bluePrint))
-          marker.move(bluePrint).flatMap(m => _paths(m, markers))
-//          markersMover(marker.move(bluePrint), markers, xs) ++ markers
+          val newMarkers = marker.move(bluePrint)
+          if (newMarkers.isEmpty) Vector() else _paths(newMarkers.head, markers, newMarkers.tail ++ prevMarkers)
         }
       }
 
-/*
-      def markersMover(newMarkers : Vector[Marker], markers : Vector[Marker], xs : Vector[Marker]) = {
-        _paths(newMarkers.head, markers, newMarkers.tail ++ xs) ++ markers
-      }
-*/
-
-      Marker(start, Vector[Pos]()).moves(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector()))
-//      Marker(start, Vector[Pos]()).moves(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector(), Vector()))
+      Marker(start, Vector[Pos]()).dirs(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector(), Vector()))
     }
 
     val allPaths = paths(mazeEntrance, mazeExit, bluePrint)
