@@ -25,6 +25,14 @@ def mergeSort[A <% Ordered[A]](l : List[A]) : List[A] = {
   }
 }
 
-mergeSort(l)
+def quicksort[A <% Ordered[A]](l: List[A]): List[A] = {
+  l match {
+    case Nil => List[A]()
+    case x :: xs => quicksort(xs.filter(_ < x)) ++ List(x) ++ quicksort(xs.filter(_ >= x))
+  }
+}
 
+mergeSort(l)
+quicksort(l)
 mergeSort(s)
+quicksort(s)
