@@ -9,7 +9,7 @@ package org.teckhooi.labyrinth
 
 object LabyrinthSolver {
   def main(args: Array[String]) {
-    val mazeText = io.Source.fromInputStream(getClass.getResourceAsStream(args(0))).getLines()
+    val mazeText = io.Source.fromInputStream(getClass.getResourceAsStream(args(0))).getLines().filterNot(_.isEmpty)
 
     case class Pos(y: Int, x: Int)
 
@@ -71,7 +71,8 @@ object LabyrinthSolver {
     }
 
     case class Marker(pos: Pos, history: Vector[Pos]) {
-      def moves(bluePrint : BluePrint) = Vector(Up(), Right(), Down(), Left()).filter(m => m.isLegal(pos, bluePrint) && !history.contains(pos))
+      def moves(bluePrint : BluePrint) = Vector(Up(), Right(), Down(), Left()).filter(
+        m => m.isLegal(pos, bluePrint) && !history.contains(m.move(pos, bluePrint).getOrElse(Pos(0,0))))
 
       def move(bluePrint : BluePrint) : Vector[Marker] = moves(bluePrint).map(m => Marker(m.move(pos, bluePrint).get, pos +: history))
 
@@ -80,24 +81,35 @@ object LabyrinthSolver {
 
     def paths(start: Pos, goal: Pos, bluePrint : BluePrint): Vector[Marker] = {
       def _paths(marker: Marker, markers : Vector[Marker]): Vector[Marker] = {
+//      def _paths(marker: Marker, markers : Vector[Marker], xs : Vector[Marker]): Vector[Marker] = {
         if (marker.hasArrivedAt(goal)) Marker(marker.pos, marker.pos +: marker.history) +: markers
         else if (marker.moves(bluePrint).isEmpty) markers
         else {
+          val moves = marker.move(bluePrint)
+          println(marker.moves(bluePrint))
           marker.move(bluePrint).flatMap(m => _paths(m, markers))
+//          markersMover(marker.move(bluePrint), markers, xs) ++ markers
         }
       }
 
-      def _processPath() = {
-
+/*
+      def markersMover(newMarkers : Vector[Marker], markers : Vector[Marker], xs : Vector[Marker]) = {
+        _paths(newMarkers.head, markers, newMarkers.tail ++ xs) ++ markers
       }
+*/
 
       Marker(start, Vector[Pos]()).moves(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector()))
+//      Marker(start, Vector[Pos]()).moves(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector(), Vector()))
     }
 
-    val shortestPath = paths(mazeEntrance, mazeExit, bluePrint).reduce((m,n) => if (m.history.size < n.history.size) m else n).history
+    val allPaths = paths(mazeEntrance, mazeExit, bluePrint)
+    if (allPaths.isEmpty) {
+      println("No solution found.")
+    } else {
+      val shortestPath = allPaths.reduce((m,n) => if (m.history.size < n.history.size) m else n).history
+      val solution = shortestPath.foldLeft(bluePrint.rawMaze)((raw, p) => raw.updated(p.y, raw(p.y).updated(p.x, '+')))
 
-    val solution = shortestPath.foldLeft(bluePrint.rawMaze)((raw, p) => raw.updated(p.y, raw(p.y).updated(p.x, '+')))
-
-    solution.foreach(println)
+      solution.foreach(println)
+    }
   }
 }
