@@ -71,7 +71,7 @@ val mediumMaze =
     |*   *                 *           *         *     *
     |************************* *************************""".stripMargin
 
-val rawMaze = smallMaze.split('\n').map(_.trim).toVector
+val rawMaze = mediumMaze.split('\n').map(_.trim).toVector
 
 case class Pos(y: Int, x: Int)
 
@@ -140,25 +140,28 @@ case class Marker(pos: Pos, history: Vector[Pos]) {
   def hasArrivedAt(goal: Pos) = pos == goal
 }
 
+import scala.util.control.TailCalls._
+
 def paths(start: Pos, goal: Pos, bluePrint : BluePrint): Vector[Marker] = {
-  @annotation.tailrec
-  def _path(marker: Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]): Vector[Marker] = {
+  def _path(marker: Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]): TailRec[Vector[Marker]] = {
     if (marker.hasArrivedAt(goal)) {
-      println(marker)
-      Marker(marker.pos, marker.pos +: marker.history) +: markers
-    }
-    else if (marker.dirs(bluePrint).isEmpty) {
-      if (prevMarkers.isEmpty) Vector() else _path(prevMarkers.head, markers, prevMarkers.tail)
+      if (prevMarkers.isEmpty) done(markers)
+      else tailcall(_nextPath(prevMarkers.head, Marker(marker.pos, marker.pos +: marker.history) +: markers, prevMarkers.tail))
+    } else if (marker.dirs(bluePrint).isEmpty) {
+      if (prevMarkers.isEmpty) done(markers) else tailcall(_nextPath(prevMarkers.head, markers, prevMarkers.tail))
     }
     else {
       val newMarkers = marker.move(bluePrint)
-      if (newMarkers.isEmpty) Vector() else _path(newMarkers.head, markers, newMarkers.tail ++ prevMarkers )
+      if (newMarkers.isEmpty) done(markers) else tailcall(_nextPath(newMarkers.head, markers, newMarkers.tail ++ prevMarkers))
     }
   }
 
-  Marker(start, Vector[Pos]()).dirs(bluePrint).flatMap(m => _path(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector(), Vector()))
-}
+  def _nextPath(marker : Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]) : TailRec[Vector[Marker]] = {
+    _path(marker, markers, prevMarkers)
+  }
 
+  _path(Marker(start, Vector()), Vector(), Vector()).result
+}
 val allPaths = paths(mazeEntrance, mazeExit, bluePrint)
 if (allPaths.isEmpty) {
   println("No solution found.")
@@ -166,5 +169,6 @@ if (allPaths.isEmpty) {
   val shortestPath = allPaths.reduce((m,n) => if (m.history.size < n.history.size) m else n).history
   val solution = shortestPath.foldLeft(bluePrint.rawMaze)((raw, p) => raw.updated(p.y, raw(p.y).updated(p.x, '+')))
   solution.foreach(println)
+  println("Number of solutions: " + solution.size)
 }
 

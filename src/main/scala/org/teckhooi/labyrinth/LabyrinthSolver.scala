@@ -9,7 +9,7 @@ package org.teckhooi.labyrinth
 
 object LabyrinthSolver {
   def main(args: Array[String]) {
-    val mazeText = io.Source.fromInputStream(getClass.getResourceAsStream(args(0))).getLines().filterNot(_.isEmpty)
+    val mazeText = io.Source.fromFile(args(0)).getLines().filterNot(_.isEmpty)
 
     case class Pos(y: Int, x: Int)
 
@@ -79,20 +79,27 @@ object LabyrinthSolver {
       def hasArrivedAt(goal: Pos) = pos == goal
     }
 
+    import scala.util.control.TailCalls._
+
     def paths(start: Pos, goal: Pos, bluePrint : BluePrint): Vector[Marker] = {
-      @annotation.tailrec
-      def _paths(marker: Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]): Vector[Marker] = {
-        if (marker.hasArrivedAt(goal)) Marker(marker.pos, marker.pos +: marker.history) +: markers
-        else if (marker.dirs(bluePrint).isEmpty) {
-          if (prevMarkers.isEmpty) Vector() else _paths(prevMarkers.head, markers, prevMarkers.tail)
+      def _path(marker: Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]): TailRec[Vector[Marker]] = {
+        if (marker.hasArrivedAt(goal)) {
+          if (prevMarkers.isEmpty) done(markers)
+          else tailcall(_nextPath(prevMarkers.head, Marker(marker.pos, marker.pos +: marker.history) +: markers, prevMarkers.tail))
+        } else if (marker.dirs(bluePrint).isEmpty) {
+          if (prevMarkers.isEmpty) done(markers) else tailcall(_nextPath(prevMarkers.head, markers, prevMarkers.tail))
         }
         else {
           val newMarkers = marker.move(bluePrint)
-          if (newMarkers.isEmpty) Vector() else _paths(newMarkers.head, markers, newMarkers.tail ++ prevMarkers)
+          if (newMarkers.isEmpty) done(markers) else tailcall(_nextPath(newMarkers.head, markers, newMarkers.tail ++ prevMarkers))
         }
       }
 
-      Marker(start, Vector[Pos]()).dirs(bluePrint).flatMap(m => _paths(Marker(m.move(start, bluePrint).get, start +: Vector()), Vector(), Vector()))
+      def _nextPath(marker : Marker, markers : Vector[Marker], prevMarkers : Vector[Marker]) : TailRec[Vector[Marker]] = {
+        _path(marker, markers, prevMarkers)
+      }
+
+      _path(Marker(start, Vector()), Vector(), Vector()).result
     }
 
     val allPaths = paths(mazeEntrance, mazeExit, bluePrint)
@@ -103,6 +110,7 @@ object LabyrinthSolver {
       val solution = shortestPath.foldLeft(bluePrint.rawMaze)((raw, p) => raw.updated(p.y, raw(p.y).updated(p.x, '+')))
 
       solution.foreach(println)
+      println("Solutions found: " + solution.size)
     }
   }
 }
