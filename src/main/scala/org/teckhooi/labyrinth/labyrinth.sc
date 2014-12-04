@@ -1,15 +1,3 @@
-<<<<<<< HEAD
-val twoWaysMaze =
-  """***** ***
-    |*       *
-    |* ***** *
-    |*       *
-    |****** **""".stripMargin
-
-val twoWaysRaw = twoWaysMaze.split('\n').map(_.trim).toVector
-
-val amazingMaze =
-=======
 val smallMaze =
   """***** ***
     |*       *
@@ -18,7 +6,6 @@ val smallMaze =
     |****** **""".stripMargin
 
 val mediumMaze =
->>>>>>> Combined sorting algorithms in single worksheet.
   """************************* *************************
     |*                                   * *           *
     |* * *** *** ******************* ***** * * * * * ***
