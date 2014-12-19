@@ -59,12 +59,12 @@
 (defn map-maze [strMaze]
   (def v (map #(vec %1) (.split strMaze "\n")))
   (vec (map-indexed (fn [a b] (vec (map-indexed (fn [c x] (if (= \* x) nil  [a c]) ) b))) v))
-)
+  )
 
-(def mapped-maze (map-maze crazy-maze))
+(def mapped-maze (map-maze empty-maze))
 
 (defn make-blueprint [raw-maze]
-    (fn [y x] (get (get raw-maze y) x)))
+  (fn [y x] (get (get raw-maze y) x)))
 
 (def blueprint (make-blueprint mapped-maze))
 
@@ -90,9 +90,6 @@
   (let [[y x] pos]
     (blueprint y (dec x))))
 
-; flatMap equivalent??
-(defn flat-map [g f xs] (filter #(g %1) (map (fn [x] (f x))  xs)))
-
 (defn seq-contains? [coll target] (some #(= target %) coll))
 
 ; example usage of seq-contains?
@@ -102,11 +99,14 @@
 
 (def exit (first (drop-while nil? (last mapped-maze))))
 
+; flatMap equivalent??
+(defn flat-map [g f xs] (filter #(g %1) (map (fn [x] (f x))  xs)))
+
 ; instead of create new positions, create new markers. marker has a ancesteral path
 (defn neigbours [x]
   (let [all-moves [move-up move-left move-down move-right]
         [current path-to-root] x]
-     (flat-map #(not-nil? (first %1)) #(vector (%1 current) (conj path-to-root current)) all-moves)))
+    (flat-map #(not-nil? (first %1)) #(vector (%1 current) (conj path-to-root current)) all-moves)))
 
 (neigbours [[1 5] []])
 
@@ -119,7 +119,7 @@
                   (def new-queue (filter #(nil? (history (first %1))) (into queue new-neighbours)))
                   (if (nil? new-queue) nil
                     (_bfs-path (first new-queue) (vec (rest new-queue)) (conj history (ffirst new-queue)))
-                  )))))]
+                    )))))]
     (_bfs-path [origin []] [] #{origin})))
 
 (def solution (second (bfs-path start exit)))
@@ -127,10 +127,8 @@
 (def solution-set (set solution))
 
 (def solved-maze-layout (map #(map (fn [x] (cond
-       (= x nil) \*
-       (solution-set x) \+
-       :else \space )) %1) mapped-maze))
-
+                                             (= x nil) \*
+                                             (solution-set x) \+
+                                             :else \space )) %1) mapped-maze))
 
 (doseq [row solved-maze-layout] (println (apply str row)))
-

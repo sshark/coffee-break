@@ -41,5 +41,13 @@
       (recur (- x 1) (+ x acc))))]
   (_sum l 0)))
 
+(defn flat-map [f xs] (filter identity (map (fn [x] (f x))  xs)))       
 
+(defn show [x]
+    (let [[current path-to-root] x]
+        (map #(vector (%1 current) (conj path-to-root current)) [identity identity])))
+
+(show [[1 2] [[3 5]]])
+        
+ 
 
