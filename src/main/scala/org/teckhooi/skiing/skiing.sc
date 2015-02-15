@@ -1,3 +1,6 @@
+import java.util.concurrent.Executors
+
+import scala.concurrent.Await
 import scala.io.Source
 
 val expectedMap = List(List(4, 8, 7, 3),
@@ -77,11 +80,53 @@ def extractLongestRouteAndSteepest(points: Option[List[Point]]) = {
       l.head.height - l.last.height))
   }
 }
+
+/*
+points.map(skiing(_, smallMapNavi)).map(_.foreach {
+  case x => println(x)
+})
+*/
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future, Promise}
+
+val executorService = Executors.newFixedThreadPool(16)
+
+implicit val ec = ExecutionContext.fromExecutorService(executorService)
+
+def futureSkiing(start: Point, navi: Navigation): Future[List[List[Point]]] = {
+  val p = Promise[List[List[Point]]]()
+  Future {
+    p.success(skiing(start, navi))
+  }
+  p.future
+}
+
+val bigMap = Source.fromFile("/home/thlim/workspace/playground/coffee-break/src/main/resources/map.txt").getLines().drop(1).toList
+val bigSlopes = bigMap.map(_.split(' ').toList.map(_.toInt))
+val bigMapNavi = new Navigation(bigSlopes)
+val bigPoints = slopesToPoints(bigSlopes)
+//val bigPath = longestRoute(bigPoints.flatMap(skiing(_, bigMapNavi)))
+
+val futurePath = Future.sequence(bigPoints.map(futureSkiing(_, bigMapNavi)))
+
+/*
+val futurePath = Future.sequence(bigPoints.map(futureSkiing(_, bigMapNavi))).map(_.foreach {
+  case x => println(x)
+})
+*/
+Await.result(futurePath, 5 minutes)
+ec.shutdown()
+
+/*
 val path = longestRoute(points.flatMap(skiing(_, smallMapNavi)))
 val smallResult = extractLongestRouteAndSteepest(path)
 println(s"Route = ${path.get}")
 println(s"Longest route = ${smallResult.get._1.size}")
 println(s"Steepest = ${smallResult.get._2}")
+*/
+
+/*
 val bigMap = Source.fromFile("/home/thlim/workspace/playground/coffee-break/src/main/resources/map.txt").getLines().drop(1).toList
 val bigSlopes = bigMap.map(_.split(' ').toList.map(_.toInt))
 val bigMapNavi = new Navigation(bigSlopes)
@@ -95,3 +140,4 @@ val bigResult = extractLongestRouteAndSteepest(bigPath)
 println(s"Route = ${bigPath.get}")
 println(s"Longest route = ${bigResult.get._1.size}")
 println(s"Steepest = ${bigResult.get._2}")
+*/
