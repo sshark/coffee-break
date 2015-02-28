@@ -7,20 +7,15 @@ val expectedMap = List(List(4, 8, 7, 3),
   List(2, 5, 9, 3),
   List(6, 3, 2, 5),
   List(4, 4, 1, 6))
-
 val textSlopes = Source.fromFile("/home/thlim/workspace/playground/coffee-break/src/main/resources/small-map.txt").getLines().drop(1).toList
-
 val slopes = textSlopes.map(_.split(' ').map(_.toInt).toList)
 slopes.size
-
 case class Point(y: Int, x: Int, height: Int)
-
 def slopesToPoints(l: List[List[Int]]) = l.zipWithIndex.flatMap (y =>
   y._1.zipWithIndex.flatMap (x =>
     List(Point(y._2, x._2, x._1))))
 val points = slopesToPoints(slopes)
 points.size
-
 class Navigation(val slopes: List[List[Int]]) {
   val movements: List[Tuple2[Int, Int]] = List((1, 0), (0, 1), (-1, 0), (0, -1))
 
@@ -33,111 +28,50 @@ class Navigation(val slopes: List[List[Int]]) {
     }))
   }
 }
-
 val smallMapNavi = new Navigation(expectedMap)
 smallMapNavi.newLoc(Point(1, 1, 4))
 
-def skiing(start: Point, navi: Navigation): List[List[Point]] = {
-  def _skiing(paths: List[Point], queue: List[Point], acc: List[List[Point]]): List[List[Point]] = {
-    paths match {
-      case Nil => (start :: queue.reverse) :: acc
-      case x :: xs => {
-        val localAcc = _skiing(navi.newLoc(x), x :: queue, acc)
-        if (xs.isEmpty) localAcc else _skiing(xs, queue, localAcc)
-      }
-    }
-  }
-
-  _skiing(navi.newLoc(start), List.empty[Point], List.empty[List[Point]])
-}
-
-skiing(Point(1, 1, 4), smallMapNavi)
-skiing(Point(0, 1, 8), smallMapNavi)
-
-def longestRoute(routes: List[List[Point]]) = {
-  def _longestRoutes(nextRoutes: List[List[Point]], acc: Option[List[Point]]): Option[List[Point]] = {
-    nextRoutes match {
-      case Nil => acc
-      case x :: xs => acc match {
-        case None => _longestRoutes(xs, Some(x))
-        case Some(y) => if (x.length > y.length || (heightDiff(x) > heightDiff(y) && x.length == y.length))
-          _longestRoutes(xs, Some(x))
-          else _longestRoutes(xs, Some(y))
-      }
-    }
-  }
-
-  def heightDiff(xs: List[Point]) = {
-    xs.head.height - xs.last.height
-  }
-  _longestRoutes(routes, None)
-}
-
-def extractLongestRouteAndSteepest(points: Option[List[Point]]) = {
-  points match {
-    case None => None
-    case Some(l) => Some((l.foldLeft(List.empty[Int])((l, p) => p.height :: l).reverse,
-      l.head.height - l.last.height))
-  }
-}
-
-/*
-points.map(skiing(_, smallMapNavi)).map(_.foreach {
-  case x => println(x)
-})
-*/
+import akka.agent.Agent
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 
 val executorService = Executors.newFixedThreadPool(16)
 
 implicit val ec = ExecutionContext.fromExecutorService(executorService)
 
-def futureSkiing(start: Point, navi: Navigation): Future[List[List[Point]]] = {
-  val p = Promise[List[List[Point]]]()
-  Future {
-    p.success(skiing(start, navi))
+val finalAcc = Agent(List.empty[Point])
+
+def skiing(start: Point, navi: Navigation, acc: Agent[List[Point]]) = {
+  def _skiing(paths: List[Point], queue: List[Point]): Unit = {
+    paths match {
+      case Nil => acc.send(x => maxRoute(start :: queue.reverse, x))
+      case x :: xs => {
+        _skiing(navi.newLoc(x), x :: queue)
+        if (xs.nonEmpty) _skiing(xs, queue)
+      }
+    }
   }
-  p.future
+
+  _skiing(navi.newLoc(start), List.empty[Point])
 }
 
+def maxRoute(x: List[Point], y: List[Point]) = {
+  def heightDiff(xs: List[Point]) = {
+    xs.head.height - xs.last.height
+  }
+  if (x.length > y.length || (heightDiff(x) > heightDiff(y) && x.length == y.length)) x else y
+}
+
+def futureSkiing(start: Point, navi: Navigation, acc: Agent[List[Point]]) = Future {
+    skiing(start, navi, acc)
+}
 val bigMap = Source.fromFile("/home/thlim/workspace/playground/coffee-break/src/main/resources/map.txt").getLines().drop(1).toList
 val bigSlopes = bigMap.map(_.split(' ').toList.map(_.toInt))
 val bigMapNavi = new Navigation(bigSlopes)
 val bigPoints = slopesToPoints(bigSlopes)
-//val bigPath = longestRoute(bigPoints.flatMap(skiing(_, bigMapNavi)))
-
-val futurePath = Future.sequence(bigPoints.map(futureSkiing(_, bigMapNavi)))
-
-/*
-val futurePath = Future.sequence(bigPoints.map(futureSkiing(_, bigMapNavi))).map(_.foreach {
-  case x => println(x)
-})
-*/
-Await.result(futurePath, 5 minutes)
+val futureRoutes = Future.sequence(bigPoints.map(futureSkiing(_, bigMapNavi, finalAcc)))
+Await.result(futureRoutes, 5 minute)
+val x = finalAcc.get()
+println(x.size + " :: " + (x.head.height - x.last.height))
 ec.shutdown()
-
-/*
-val path = longestRoute(points.flatMap(skiing(_, smallMapNavi)))
-val smallResult = extractLongestRouteAndSteepest(path)
-println(s"Route = ${path.get}")
-println(s"Longest route = ${smallResult.get._1.size}")
-println(s"Steepest = ${smallResult.get._2}")
-*/
-
-/*
-val bigMap = Source.fromFile("/home/thlim/workspace/playground/coffee-break/src/main/resources/map.txt").getLines().drop(1).toList
-val bigSlopes = bigMap.map(_.split(' ').toList.map(_.toInt))
-val bigMapNavi = new Navigation(bigSlopes)
-bigSlopes.size
-bigSlopes(0).size
-bigSlopes(1)(2)
-bigSlopes(999)(999)
-val bigPoints = slopesToPoints(bigSlopes)
-val bigPath = longestRoute(bigPoints.flatMap(skiing(_, bigMapNavi)))
-val bigResult = extractLongestRouteAndSteepest(bigPath)
-println(s"Route = ${bigPath.get}")
-println(s"Longest route = ${bigResult.get._1.size}")
-println(s"Steepest = ${bigResult.get._2}")
-*/
