@@ -92,11 +92,9 @@ object Skiing  extends App {
   val remote: Option[BufferedSource] = if (args.isEmpty) {
     catching(classOf[java.io.IOException]) opt Source.fromURL("http://s3-ap-southeast-1.amazonaws.com/geeks.redmart.com/coding-problems/map.txt")
   } else {
-    val input = getClass.getResourceAsStream(args(0))
-    if (input == null) {
-      None
-    } else {
-      catching(classOf[java.io.IOException]) opt Source.fromInputStream(input)
+    Option(getClass.getResourceAsStream(args(0))) match {
+      case Some(input) => catching(classOf[java.io.IOException]) opt Source.fromInputStream(input)
+      case _ => None
     }
   }
 
@@ -115,7 +113,7 @@ object Skiing  extends App {
             println(s"Steepest = $steepest")
         }
       }
-      case Left(x) => println("Failed to extract or find the longest route.")
+      case Left(x) => throw x
     }
   }
 }

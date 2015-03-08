@@ -1,8 +1,8 @@
 import akka.dispatch.ExecutionContexts;
 import akka.dispatch.Futures;
 import akka.dispatch.OnFailure;
+import akka.japi.Pair;
 import com.mchange.v2.c3p0.ComboPooledDataSource;
-import javafx.util.Pair;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -78,8 +78,8 @@ public class TakingCoffeOrdersSuite {
         for (int i = 0; i < 1000; i++) {
             stmt.setString(1, randomName());
             Pair<String, Double> drink = randomDrink();
-            stmt.setString(2, drink.getKey());
-            stmt.setDouble(3, drink.getValue());
+            stmt.setString(2, drink.first());
+            stmt.setDouble(3, drink.second());
             stmt.execute();
         }
         stmt.close();
@@ -104,8 +104,8 @@ public class TakingCoffeOrdersSuite {
                 public Boolean call() throws Exception {
                     stmt.setString(1, randomName());
                     Pair<String, Double> drink = randomDrink();
-                    stmt.setString(2, drink.getKey());
-                    stmt.setDouble(3, drink.getValue());
+                    stmt.setString(2, drink.first());
+                    stmt.setDouble(3, drink.second());
                     boolean result = stmt.execute();
                     return result;
                 }
