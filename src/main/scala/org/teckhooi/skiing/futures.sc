@@ -1,48 +1,42 @@
-//val s = (1 to 10).map(x => {println(s"Running $x");(1 to 1000000).toList})
+// it worked because the count is small i.e. 2 counts and it is a single threaded task
+(1 to 2).map(x => (1 to 1000000).map(_.toLong).toList).map(_.sum).sum
 
+// single thread task crashed because it ran out of memory even though the count is increased slightly.
+// This is also highly dependent on the memory allocated to the runtime JVM
+(1 to 4).map(x => (1 to 1000000).map(_.toLong).toList).map(_.sum).sum
+
+import scala.concurrent.duration._
 import scala.concurrent.forkjoin.ForkJoinPool
-import scala.concurrent.{ExecutionContext, Future, Promise}
-implicit val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(2))
-
-val f  = (1 to 120).map(x => {
-  val p = Promise[List[Int]]
-
-  Future {
-    println(s"Running $x")
-    p.success((1 to 100000).toList)
-    println(s"Done $x")
-  }
-  p.future.onSuccess{case y => println(s"$x => ${y.sum}")}
-}
-)
-
-//val ff = Future.sequence(f)
-
-//val fResult = Await.result(ff, 30 seconds)
-
-
-Thread.sleep(10000)
-
-//fResult.foreach(x => println(x.sum))
-// val ff = Future.sequence(f)
-// ec.shutdown
-
+import scala.concurrent.{Await, ExecutionContext, Future}
+// implicit val ec = ExecutionContext.fromExecutorService(Executors.newFixedThreadPool(4))
+implicit val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(4))
 //implicit val ec = ExecutionContext.fromExecutorService(new ForkJoinPool(2))
+//implicit val ec = ExecutionContext.fromExecutorService(Executors.newFixedThreadPool(2))
 
-// val g  = (1 to 30).map(x => {println(s"Running $x");Future{(1 to 100000).toList}})
+// multi threaded task crashed because it ran out of memory
+def runmeCrashed(n: Int = 120) = (1 to n).map{tuple =>
+  Future {
+    (1 to 100000).map(_.toLong).toList
+  }}
+val bad = Await.result(Future.sequence(runmeCrashed()), 10 second)
+bad.reduce(_.sum + _.sum)
 
-/*
-Future.sequence(g).onComplete {
-    case Success(x) => x.foreach(y => println(y.sum))
-    case Failure(x) => x.printStackTrace
+// using Future to run each group concurrently. Use small memory footprint.
+def runme(n: Int = 120) = (1 to n).grouped(2).flatMap{tuple =>
+    val batches = Future.sequence(tuple.map{x => Future {
+        (1 to 100000).map(_.toLong).toList
+    }})
+    Await.result(batches, 10 second).map(_.sum)
 }
-*/
-// val gf = Future.sequence(g)
-
-// val fResult = Await.result(ff, 5 minutes)
-// println(fResult)
-//val gResult = Await.result(gf, 5 minutes)
-
-//ec.shutdown
-
-//(1 to 10).map(x => Future{(1 to 1000000).toList.reduce(_+_)}).foreach(_.onSuccess{case x => println(x)})
+val result = runme().toList   // because iterator would not reset its pointer after it has iterated thru its elements
+println(s"The total of size ${result.size}  is " + (if (result.sum != 600006000000L) "NOT " else "") + "tally with 600006000000")
+ec.shutdown
+// do not use List if it is intended for parallel executions. Use Vector or Seq i.e. toVector or toSeq but not toList.
+// Using parallel collection to run each group concurrently. Use small memory footprint.
+def runmePar(n: Int = 120) = (1 to n).grouped(2).toVector.flatMap{tuple =>
+  tuple.par.map{x => {
+      (1 to 100000).map(_.toLong).toList
+  }}.map(_.sum)
+}
+val resultPar = runmePar()
+println(s"The total of size ${resultPar.size}  is " + (if (resultPar.sum != 600006000000L) "NOT " else "") + "tally with 600006000000")

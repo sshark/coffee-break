@@ -1,6 +1,6 @@
 name := "coffee-break"
 
-scalaVersion := "2.11.1"
+scalaVersion := "2.11.6"
 
 version := "1.0-SNAPSHOT"
 
