@@ -4,8 +4,7 @@ import org.junit.Assert._
 import org.junit.Test
 import org.teckhooi.skiing.Skiing._
 
-import scala.io.{Codec, Source}
-import scala.util.control.Exception._
+import scala.io.Source
 
 /**
  *
@@ -20,8 +19,6 @@ class SkiingSuite {
     List(6, 3, 2, 5),
     List(4, 4, 1, 6))
 
-  implicit val codec = Codec.UTF8
-
   val source = Source.fromInputStream(getClass.getResourceAsStream("/small-map.txt"))
 
   @Test
@@ -33,61 +30,39 @@ class SkiingSuite {
   }
 
   @Test
-  def slopesToPoint(): Unit = {
+  def testSkiingWithNavigation(): Unit = {
     extractPeaksLayoutFrom(source) match {
-      case Right(layout) => assertEquals(16, slopesToWayPoints(layout).size)
+      case Right(layout) =>
+        assertEquals(4, layout.size)
+        assertEquals(4, layout(0).size)
+        assertEquals(List(4, 2), skiing(0, 0, new Navigation(layout)))
       case Left(ex) => throw ex
     }
   }
 
   @Test
-  def testSkiWithNavigation(): Unit = {
+  def testFindLongestSkiingRouteWithSingleThread(): Unit = {
     extractPeaksLayoutFrom(source) match {
-      case Right(layout) => val wayPoints = slopesToWayPoints(layout)
-        assertEquals(16, wayPoints.size)
-        assertTrue(List(List(Point(0,0,4), Point(1,0,2))) == ski(wayPoints(0), new Navigation(layout)))
+      case Right(layout) =>
+        val navi = new Navigation(layout)
+        assertEquals(List(9, 5, 3, 2, 1),
+          (0 until (navi.maxY * navi.maxX)).map(x => skiing(x / navi.maxY, x % navi.maxX, navi)).reduce(maxRoute))
       case Left(ex) => throw ex
     }
   }
 
   @Test
-  def testLongestRouteFound(): Unit = {
+  def testFindLongestSkiingRouteParallel(): Unit = {
     extractPeaksLayoutFrom(source) match {
-      case Right(layout) => val wayPoints = slopesToWayPoints(layout)
-        assertEquals(16, wayPoints.size)
-        assertTrue(List(Point(1,2,9), Point(1,1,5), Point(2,1,3), Point(2,2,2), Point(3,2,1)) ==
-          longestWayPoints(wayPoints.flatMap(ski(_, new Navigation(layout)))).get)
-      case Left(ex) => throw ex
-    }
-  }
-
-  @Test
-  def testReadFromHTTP(): Unit = {
-    val remote = catching(classOf[java.io.IOException]) opt Source.fromURL("http://s3-ap-southeast-1.amazonaws.com/geeks.redmart.com/coding-problems/map.txt") match {
-      case None => catching(classOf[java.io.IOException]) either Source.fromInputStream(getClass.getResourceAsStream("/small-map.txt")) match {
-        case Right(x) => x
-        case Left(x) => throw x
-      }
-      case Some(x) => x
-    }
-
-    extractPeaksLayoutFrom(remote) match {
-      case Right(layout) => val wayPoints = slopesToWayPoints(layout)
-        assertEquals(1000000, wayPoints.size)
-      case Left(ex) => throw ex
-    }
-
-    val local = catching(classOf[java.io.IOException]) opt Source.fromURL("http://s3-ap-southeast-1.amazonaws.com/geeks.redmart.com/coding-problems/map-not-found.txt") match {
-      case None => catching(classOf[java.io.IOException]) either Source.fromInputStream(getClass.getResourceAsStream("/small-map.txt")) match {
-        case Right(x) => x
-        case Left(x) => throw x
-      }
-      case Some(x) => x
-    }
-
-    extractPeaksLayoutFrom(local) match {
-      case Right(layout) => val wayPoints = slopesToWayPoints(layout)
-        assertEquals(16, wayPoints.size)
+      case Right(layout) =>
+        val navi = new Navigation(layout)
+        assertEquals(List(9, 5, 3, 2, 1),
+          (0 until (navi.maxY * navi.maxX)).grouped(2).foldLeft(List.empty[Int]){case (l, tuple) =>
+            val batches = tuple.par.map{x =>
+              skiing(x / navi.maxY, x % navi.maxX, navi)
+            }
+            maxRoute(l, batches.reduce(maxRoute(_, _)))
+          })
       case Left(ex) => throw ex
     }
   }

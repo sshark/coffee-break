@@ -1,6 +1,6 @@
 package org.teckhooi.skiing
 
-import scala.io.{BufferedSource, Codec, Source}
+import scala.io.{BufferedSource, Source}
 import scala.util.control.Exception._
 
 /**
@@ -10,25 +10,59 @@ import scala.util.control.Exception._
  *
  */
 
-case class Point(y: Int, x: Int, height: Int)
+case class Point(y: Int, x: Int, h: Int)
 
-class Navigation(val slopes: List[List[Int]]) {
-  val movements: List[Tuple2[Int, Int]] = List((1, 0), (0, 1), (-1, 0), (0, -1))
-
-  def newLoc(loc: Point) = {
-    val moves = movements.map(d => Point(d._1 + loc.y, d._2 + loc.x, loc.height))
-
-    moves.flatMap(p => slopes.lift(p.y).flatMap(_.lift(p.x) match {
-      case Some(x) => if (x < p.height) Some(Point(p.y, p.x, x)) else None
-      case _ => None
-    }))
+class Navigation(val peaks: List[List[Int]]) {
+  val maxY = peaks.size
+  val maxX = peaks(0).size
+  val movements = List((1, 0), (0, 1), (-1, 0), (0, -1))
+  def newLoc(y: Int, x: Int, height: Int) = {
+    val moves = movements.map(d => (d._1 + y, d._2 + x)).filter(d => d._1 >= 0 && d._1 < maxY && d._2 >= 0 && d._2 < maxX)
+    moves.flatMap{case p =>
+      val peak = peaks(p._1 % maxY)(p._2 % maxX)
+      if (peak < height) Some(Point(p._1, p._2, peak)) else None
+    }
   }
 }
 
 object Skiing  extends App {
 
-  type Routes = List[List[Point]]
+  type Routes = List[Route]
   type Route = List[Point]
+
+  def skiing(y: Int, x: Int, navi: Navigation): List[Int] = {
+    def _skiing(paths: List[Point], queue: List[Point], acc: List[Int]): List[Int] = {
+      paths match {
+        case Nil => maxRoute(navi.peaks(y)(x) :: queue.reverse.map(_.h), acc)
+        case z :: zs => {
+          val localAcc = _skiing(navi.newLoc(z.y, z.x, navi.peaks(z.y)(z.x)), z :: queue, acc)
+          if (zs.isEmpty) localAcc else _skiing(zs, queue, localAcc)
+        }
+      }
+    }
+
+    _skiing(navi.newLoc(y, x, navi.peaks(y)(x)), List.empty[Point], List.empty[Int])
+  }
+
+  def futureSkiing(navi: Navigation) = {
+    // used Iterator instead of List before grouping. If List is used, make sure the Scala is version 2.11.6
+    // otherwise the number of elements returned from the parallel collection will not be the same as before
+    (0 until (navi.maxY * navi.maxX)).grouped(240).foldLeft(List.empty[Int]){case (l, tuple) =>
+      val batches = tuple.par.map{x =>
+        skiing(x / navi.maxY, x % navi.maxX, navi)
+      }
+      maxRoute(l, batches.reduce(maxRoute(_, _)))
+    }
+  }
+  def maxRoute(x: List[Int], y: List[Int]) = {
+    def heightDiff(xs: List[Int]) = {
+      xs.head - xs.last
+    }
+    if (x.isEmpty) y
+    else if (y.isEmpty) x
+    else if (x.length > y.length || (heightDiff(x) > heightDiff(y) && x.length == y.length)) x
+    else y
+  }
 
   def extractPeaksLayoutFrom(layoutInput: Source) = {
     val lines = layoutInput.getLines()
@@ -41,60 +75,9 @@ object Skiing  extends App {
     } else Right(peaksLayout)
   }
 
-  def slopesToWayPoints(l: List[List[Int]]) = l.zipWithIndex.flatMap(y =>
-    y._1.zipWithIndex.flatMap(x =>
-      List(Point(y._2, x._2, x._1))))
-
-  def ski(start: Point, navi: Navigation): Routes = {
-    def _ski(nextWayPoint: Route, route: Route, routeAccumulator: Routes): List[List[Point]] = {
-      nextWayPoint match {
-        case Nil => (start :: route.reverse) :: routeAccumulator
-        case x :: xs => {
-          val minorRouteAccumulator = _ski(navi.newLoc(x), x :: route, routeAccumulator)
-          if (xs.isEmpty) minorRouteAccumulator else _ski(xs, route, minorRouteAccumulator)
-        }
-      }
-    }
-
-    _ski(navi.newLoc(start), List.empty[Point], List.empty[Route])
-  }
-
-  def longestWayPoints(routes: Routes) = {
-    def _longestWayPoints(nextRoutes: Routes, result: Option[Route]): Option[Route] = {
-      nextRoutes match {
-        case Nil => result
-        case x :: xs => result match {
-          case None => _longestWayPoints(xs, Some(x))
-          case Some(y) => if (x.length > y.length ||
-            (wayPointHeightDiff(x) > wayPointHeightDiff(y) && x.length == y.length))
-              _longestWayPoints(xs, Some(x))
-          else _longestWayPoints(xs, Some(y))
-        }
-      }
-    }
-
-    def wayPointHeightDiff(xs: List[Point]) = {
-      xs.head.height - xs.last.height
-    }
-    _longestWayPoints(routes, None)
-  }
-
-  def extractLongestRouteAndSteepestDrop(points: Option[List[Point]]) = {
-    points match {
-      case None => None
-      case Some(l) => Some((l.foldLeft(List.empty[Int])((l, p) => p.height :: l).reverse,
-        l.head.height - l.last.height))
-    }
-  }
-
-  implicit val codec = Codec.UTF8
-
-  val remote: Option[BufferedSource] = if (args.isEmpty) {
-    catching(classOf[java.io.IOException]) opt Source.fromURL("http://s3-ap-southeast-1.amazonaws.com/geeks.redmart.com/coding-problems/map.txt")
-  } else {
-    Option(getClass.getResourceAsStream(args(0))) match {
-      case Some(input) => catching(classOf[java.io.IOException]) opt Source.fromInputStream(input)
-      case _ => None
+  val remote: Option[BufferedSource] = args.headOption flatMap {filename =>
+    Option(getClass.getResourceAsStream(filename)) map {input =>
+      catching(classOf[java.io.IOException]).apply(Source.fromInputStream(input))
     }
   }
 
@@ -105,13 +88,8 @@ object Skiing  extends App {
       "still see this message it means the file at the remote location is removed or moved.")
     case Some(input) => extractPeaksLayoutFrom(input) match {
       case Right(x) => {
-        val wayPointsFound = longestWayPoints(slopesToWayPoints(x).flatMap(ski(_, new Navigation(x))))
-        extractLongestRouteAndSteepestDrop(wayPointsFound) match {
-          case None => println("No soiltion found.")
-          case Some((longestRoute, steepest)) => println(s"Raw way points found: ${wayPointsFound.get}")
-            println(s"Longest route = ${longestRoute.size}")
-            println(s"Steepest = $steepest")
-        }
+        val result = futureSkiing(new Navigation(x))
+        println(s"${result.size} :: ${result.head - result.last}")
       }
       case Left(x) => throw x
     }
